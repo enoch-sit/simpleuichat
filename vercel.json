@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs@20.x"
+    }
+  },
+  "env": [
+    "XAI_API_KEY"
+  ]
+}

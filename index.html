@@ -385,10 +385,13 @@
 
                 <div class="form-group">
                     <label for="model">Model</label>
-                    <select id="model">
-                        <option value="grok-4.3">Grok 4.3</option>
-                        <option value="grok-4">Grok 4</option>
-                    </select>
+                    <div style="display:flex;gap:6px;align-items:center;">
+                        <select id="model" style="flex:1;">
+                            <option value="grok-4-mini">grok-4-mini</option>
+                        </select>
+                        <button type="button" id="refreshModelsBtn" title="Refresh model list" style="padding:8px 10px;flex-shrink:0;">🔄</button>
+                    </div>
+                    <div id="modelStatus" style="font-size:12px;color:#666;margin-top:4px;"></div>
                 </div>
 
                 <div class="form-group">
@@ -668,6 +671,92 @@
 
         // Load chat history on page load
         loadChatHistory();
+
+        // --- Dynamic model loading ---
+        const FALLBACK_MODEL = 'grok-4-mini';
+
+        async function loadModels() {
+            const apiKey = document.getElementById('apiKey').value.trim().replace(/[\r\n]/g, '');
+            const modelSelect = document.getElementById('model');
+            const modelStatus = document.getElementById('modelStatus');
+
+            if (!apiKey) {
+                modelSelect.innerHTML = `<option value="${FALLBACK_MODEL}">${FALLBACK_MODEL}</option>`;
+                modelStatus.textContent = 'Enter an API key to load available models.';
+                modelStatus.style.color = '#666';
+                return;
+            }
+
+            // Validate API key format (alphanumeric, hyphens, underscores, dots)
+            if (!/^[\w.\-]+$/.test(apiKey)) {
+                modelSelect.innerHTML = `<option value="${FALLBACK_MODEL}">${FALLBACK_MODEL}</option>`;
+                modelStatus.textContent = 'API key contains invalid characters.';
+                modelStatus.style.color = '#c62828';
+                return;
+            }
+
+            modelStatus.textContent = 'Loading models…';
+            modelStatus.style.color = '#667eea';
+            modelSelect.disabled = true;
+
+            try {
+                let response;
+                try {
+                    response = await fetch('https://api.x.ai/v1/models', {
+                        headers: { 'Authorization': `Bearer ${apiKey}` }
+                    });
+                } catch (networkErr) {
+                    throw new Error('network error');
+                }
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const models = (data.data || [])
+                    .filter(m => m && typeof m.id === 'string' && m.id.length > 0)
+                    .map(m => m.id)
+                    .sort();
+
+                if (models.length === 0) {
+                    throw new Error('No models returned');
+                }
+
+                const previousValue = modelSelect.value;
+                modelSelect.innerHTML = '';
+                models.forEach(id => {
+                    const opt = document.createElement('option');
+                    opt.value = id;
+                    opt.textContent = id;
+                    modelSelect.appendChild(opt);
+                });
+
+                // Restore previous selection if still available, else prefer fallback
+                if (previousValue && models.includes(previousValue)) {
+                    modelSelect.value = previousValue;
+                } else if (models.includes(FALLBACK_MODEL)) {
+                    modelSelect.value = FALLBACK_MODEL;
+                }
+
+                modelStatus.textContent = `${models.length} model(s) loaded.`;
+                modelStatus.style.color = '#2e7d32';
+            } catch (err) {
+                console.error('loadModels error:', err);
+                modelSelect.innerHTML = `<option value="${FALLBACK_MODEL}">${FALLBACK_MODEL}</option>`;
+                const safeMsg = /^(HTTP \d+|No models returned|network error)$/.test(err.message)
+                    ? err.message
+                    : 'request failed';
+                modelStatus.textContent = `Could not load models (${safeMsg}). Using ${FALLBACK_MODEL}.`;
+                modelStatus.style.color = '#c62828';
+            } finally {
+                modelSelect.disabled = false;
+            }
+        }
+
+        document.getElementById('apiKey').addEventListener('change', loadModels);
+        document.getElementById('refreshModelsBtn').addEventListener('click', loadModels);
+        loadModels();
     </script>
 </body>
 </html>
